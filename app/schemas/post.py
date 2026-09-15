@@ -9,6 +9,7 @@ class PostCreate(BaseModel):
         min_length=3,
         max_length=200
     )
+
     content: str = Field(
         ...,
         min_length=10
@@ -21,6 +22,7 @@ class PostUpdate(BaseModel):
         min_length=3,
         max_length=200
     )
+
     content: str | None = Field(
         default=None,
         min_length=10
@@ -31,6 +33,7 @@ class PostResponse(BaseModel):
     id: int
     title: str
     content: str
+    image: str | None = None
     author_id: int
     created_at: datetime
 

@@ -1,4 +1,5 @@
 
+import os
 import uuid
 from pathlib import Path
 
@@ -16,10 +17,13 @@ from fastapi import (
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from app.core.auth import get_current_user
 from app.core.database import get_db
 from app.models.post import Post
 from app.models.user import User
+from app.schemas.post import PostResponse
+
+# Change this import only if your project uses a different auth dependency.
+from app.routers.auth import get_current_user
 
 
 router = APIRouter(
@@ -40,10 +44,7 @@ POSTS_MEDIA_DIR = MEDIA_DIR / "posts"
 POSTS_MEDIA_DIR.mkdir(parents=True, exist_ok=True)
 
 
-# ============================================================
-# IMAGE SETTINGS
-# ============================================================
-
+# Allowed image types
 ALLOWED_IMAGE_TYPES = {
     "image/jpeg": ".jpg",
     "image/png": ".png",
@@ -55,10 +56,14 @@ MAX_IMAGE_SIZE = 5 * 1024 * 1024  # 5 MB
 
 
 # ============================================================
-# SAVE IMAGE
+# IMAGE HELPERS
 # ============================================================
 
 async def save_post_image(image: UploadFile) -> str:
+    """
+    Save uploaded image inside media/posts/
+    and return the relative URL.
+    """
 
     if image.content_type not in ALLOWED_IMAGE_TYPES:
         raise HTTPException(
@@ -69,9 +74,9 @@ async def save_post_image(image: UploadFile) -> str:
             ),
         )
 
-    extension = ALLOWED_IMAGE_TYPES[image.content_type]
+    file_extension = ALLOWED_IMAGE_TYPES[image.content_type]
 
-    filename = f"{uuid.uuid4().hex}{extension}"
+    filename = f"{uuid.uuid4().hex}{file_extension}"
 
     file_path = POSTS_MEDIA_DIR / filename
 
@@ -87,7 +92,7 @@ async def save_post_image(image: UploadFile) -> str:
         with open(file_path, "wb") as file:
             file.write(contents)
 
-    except OSError as exc:
+    except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Could not save image.",
@@ -96,11 +101,10 @@ async def save_post_image(image: UploadFile) -> str:
     return f"/media/posts/{filename}"
 
 
-# ============================================================
-# DELETE IMAGE
-# ============================================================
-
 def delete_post_image(image_url: str | None):
+    """
+    Delete an existing post image from disk.
+    """
 
     if not image_url:
         return
@@ -116,14 +120,13 @@ def delete_post_image(image_url: str | None):
             pass
 
 
-# ============================================================
-# IMAGE URL
-# ============================================================
-
 def make_image_url(
     request: Request,
     image: str | None,
-):
+) -> str | None:
+    """
+    Convert relative image path into a complete URL.
+    """
 
     if not image:
         return None
@@ -134,14 +137,13 @@ def make_image_url(
     return f"{str(request.base_url).rstrip('/')}{image}"
 
 
-# ============================================================
-# POST RESPONSE
-# ============================================================
-
 def post_to_response(
     request: Request,
     post: Post,
 ):
+    """
+    Convert SQLAlchemy Post object into API response.
+    """
 
     return {
         "id": post.id,
@@ -169,6 +171,11 @@ async def create_post(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    """
+    Create a new blog post.
+
+    Supports optional image upload.
+    """
 
     if len(title.strip()) < 3:
         raise HTTPException(
@@ -202,8 +209,7 @@ async def create_post(
 
 
 # ============================================================
-# GET POSTS
-# PAGINATION + SEARCH
+# LIST POSTS - PAGINATION + SEARCH
 # ============================================================
 
 @router.get("")
@@ -218,20 +224,33 @@ def get_posts(
         10,
         ge=1,
         le=100,
-        description="Posts per page",
+        description="Number of posts per page",
     ),
     search: str | None = Query(
         None,
-        description="Search by title or content",
+        description="Search posts by title or content",
     ),
     db: Session = Depends(get_db),
 ):
+    """
+    Get posts with pagination and optional search.
+
+    Examples:
+
+    /posts?page=1&limit=10
+
+    /posts?search=python
+
+    /posts?search=python&page=2&limit=5
+    """
 
     query = db.query(Post)
 
-    # Search
-    if search and search.strip():
+    # --------------------------------------------------------
+    # SEARCH
+    # --------------------------------------------------------
 
+    if search and search.strip():
         search_value = f"%{search.strip()}%"
 
         query = query.filter(
@@ -241,17 +260,26 @@ def get_posts(
             )
         )
 
-    # Total count
+    # --------------------------------------------------------
+    # TOTAL COUNT
+    # --------------------------------------------------------
+
     total = query.count()
 
-    # Total pages
+    # --------------------------------------------------------
+    # TOTAL PAGES
+    # --------------------------------------------------------
+
     total_pages = (
         (total + limit - 1) // limit
         if total > 0
         else 0
     )
 
-    # Pagination
+    # --------------------------------------------------------
+    # PAGINATION
+    # --------------------------------------------------------
+
     offset = (page - 1) * limit
 
     posts = (
@@ -261,6 +289,10 @@ def get_posts(
         .limit(limit)
         .all()
     )
+
+    # --------------------------------------------------------
+    # RESPONSE
+    # --------------------------------------------------------
 
     return {
         "posts": [
@@ -284,6 +316,9 @@ def get_my_posts(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    """
+    Get posts created by the logged-in user.
+    """
 
     posts = (
         db.query(Post)
@@ -308,6 +343,9 @@ def get_post(
     request: Request,
     db: Session = Depends(get_db),
 ):
+    """
+    Get a single blog post.
+    """
 
     post = (
         db.query(Post)
@@ -338,6 +376,14 @@ async def update_post(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    """
+    Update a post.
+
+    Only the post owner can update it.
+
+    Image is optional.
+    If a new image is uploaded, the old image is deleted.
+    """
 
     post = (
         db.query(Post)
@@ -351,14 +397,20 @@ async def update_post(
             detail="Post not found.",
         )
 
-    # Only owner can update
+    # --------------------------------------------------------
+    # OWNERSHIP CHECK
+    # --------------------------------------------------------
+
     if post.author_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You can update only your own posts.",
         )
 
-    # Update title
+    # --------------------------------------------------------
+    # UPDATE TITLE
+    # --------------------------------------------------------
+
     if title is not None:
 
         if len(title.strip()) < 3:
@@ -369,7 +421,10 @@ async def update_post(
 
         post.title = title.strip()
 
-    # Update content
+    # --------------------------------------------------------
+    # UPDATE CONTENT
+    # --------------------------------------------------------
+
     if content is not None:
 
         if len(content.strip()) < 10:
@@ -380,7 +435,10 @@ async def update_post(
 
         post.content = content.strip()
 
-    # Replace image
+    # --------------------------------------------------------
+    # UPDATE IMAGE
+    # --------------------------------------------------------
+
     if image is not None:
 
         old_image = post.image
@@ -389,7 +447,12 @@ async def update_post(
 
         post.image = new_image
 
+        # Delete old image after new image is successfully saved
         delete_post_image(old_image)
+
+    # --------------------------------------------------------
+    # SAVE
+    # --------------------------------------------------------
 
     db.commit()
     db.refresh(post)
@@ -407,6 +470,11 @@ def delete_post(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    """
+    Delete a post.
+
+    Only the post owner can delete it.
+    """
 
     post = (
         db.query(Post)
@@ -420,17 +488,26 @@ def delete_post(
             detail="Post not found.",
         )
 
-    # Only owner can delete
+    # --------------------------------------------------------
+    # OWNERSHIP CHECK
+    # --------------------------------------------------------
+
     if post.author_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You can delete only your own posts.",
         )
 
-    # Delete image from disk
+    # --------------------------------------------------------
+    # DELETE IMAGE
+    # --------------------------------------------------------
+
     delete_post_image(post.image)
 
-    # Delete database record
+    # --------------------------------------------------------
+    # DELETE POST
+    # --------------------------------------------------------
+
     db.delete(post)
     db.commit()
 
