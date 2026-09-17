@@ -18,8 +18,9 @@ from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_user
 from app.core.database import get_db
-from app.models.post import Post
+from app.models.post import Post, PostImage
 from app.models.user import User
+from app.services.subscription_limits import check_post_limit
 
 
 router = APIRouter(
@@ -37,7 +38,10 @@ BASE_DIR = Path(__file__).resolve().parent.parent.parent
 MEDIA_DIR = BASE_DIR / "media"
 POSTS_MEDIA_DIR = MEDIA_DIR / "posts"
 
-POSTS_MEDIA_DIR.mkdir(parents=True, exist_ok=True)
+POSTS_MEDIA_DIR.mkdir(
+    parents=True,
+    exist_ok=True,
+)
 
 
 # ============================================================
@@ -58,7 +62,9 @@ MAX_IMAGE_SIZE = 5 * 1024 * 1024  # 5 MB
 # SAVE IMAGE
 # ============================================================
 
-async def save_post_image(image: UploadFile) -> str:
+async def save_post_image(
+    image: UploadFile,
+) -> str:
 
     if image.content_type not in ALLOWED_IMAGE_TYPES:
         raise HTTPException(
@@ -69,9 +75,13 @@ async def save_post_image(image: UploadFile) -> str:
             ),
         )
 
-    extension = ALLOWED_IMAGE_TYPES[image.content_type]
+    extension = ALLOWED_IMAGE_TYPES[
+        image.content_type
+    ]
 
-    filename = f"{uuid.uuid4().hex}{extension}"
+    filename = (
+        f"{uuid.uuid4().hex}{extension}"
+    )
 
     file_path = POSTS_MEDIA_DIR / filename
 
@@ -100,8 +110,9 @@ async def save_post_image(image: UploadFile) -> str:
 # DELETE IMAGE
 # ============================================================
 
-def delete_post_image(image_url: str | None):
-
+def delete_post_image(
+    image_url: str | None,
+):
     if not image_url:
         return
 
@@ -124,14 +135,19 @@ def make_image_url(
     request: Request,
     image: str | None,
 ):
-
     if not image:
         return None
 
-    if image.startswith("http://") or image.startswith("https://"):
+    if (
+        image.startswith("http://")
+        or image.startswith("https://")
+    ):
         return image
 
-    return f"{str(request.base_url).rstrip('/')}{image}"
+    return (
+        f"{str(request.base_url).rstrip('/')}"
+        f"{image}"
+    )
 
 
 # ============================================================
@@ -142,12 +158,26 @@ def post_to_response(
     request: Request,
     post: Post,
 ):
-
     return {
         "id": post.id,
         "title": post.title,
         "content": post.content,
-        "image": make_image_url(request, post.image),
+
+        # Old image field kept for compatibility
+        "image": make_image_url(
+            request,
+            post.image,
+        ),
+
+        # New multiple-image support
+        "images": [
+            make_image_url(
+                request,
+                image.image_url,
+            )
+            for image in post.images
+        ],
+
         "author_id": post.author_id,
         "created_at": post.created_at,
     }
@@ -165,40 +195,139 @@ async def create_post(
     request: Request,
     title: str = Form(...),
     content: str = Form(...),
-    image: UploadFile | None = File(None),
-    current_user: User = Depends(get_current_user),
+    images: list[UploadFile] | None = File(None),
+    current_user: User = Depends(
+        get_current_user
+    ),
     db: Session = Depends(get_db),
 ):
+
+    # --------------------------------------------------------
+    # CHECK POST SUBSCRIPTION LIMIT
+    # --------------------------------------------------------
+
+    subscription = check_post_limit(
+        db=db,
+        user_id=current_user.id,
+    )
+
+    # --------------------------------------------------------
+    # VALIDATE TITLE
+    # --------------------------------------------------------
 
     if len(title.strip()) < 3:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Title must contain at least 3 characters.",
+            detail=(
+                "Title must contain at least "
+                "3 characters."
+            ),
         )
+
+    # --------------------------------------------------------
+    # VALIDATE CONTENT
+    # --------------------------------------------------------
 
     if len(content.strip()) < 10:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Content must contain at least 10 characters.",
+            detail=(
+                "Content must contain at least "
+                "10 characters."
+            ),
         )
 
-    image_path = None
+    # --------------------------------------------------------
+    # IMAGE LIST
+    # --------------------------------------------------------
 
-    if image is not None:
-        image_path = await save_post_image(image)
+    images = images or []
+
+    # --------------------------------------------------------
+    # CHECK IMAGE LIMIT
+    # --------------------------------------------------------
+
+    max_images = (
+        subscription.plan.max_images_per_post
+    )
+
+    # -1 = unlimited
+    if (
+        max_images != -1
+        and len(images) > max_images
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                "You've reached your plan limit. "
+                "Kindly upgrade your plan to continue."
+            ),
+        )
+
+    # --------------------------------------------------------
+    # CREATE POST
+    # --------------------------------------------------------
 
     post = Post(
         title=title.strip(),
         content=content.strip(),
-        image=image_path,
         author_id=current_user.id,
     )
 
     db.add(post)
-    db.commit()
-    db.refresh(post)
+    db.flush()
 
-    return post_to_response(request, post)
+    saved_images = []
+
+    try:
+
+        # ----------------------------------------------------
+        # SAVE IMAGES
+        # ----------------------------------------------------
+
+        for uploaded_image in images:
+
+            image_path = await save_post_image(
+                uploaded_image
+            )
+
+            post_image = PostImage(
+                post_id=post.id,
+                image_url=image_path,
+            )
+
+            db.add(post_image)
+
+            saved_images.append(
+                image_path
+            )
+
+        db.commit()
+        db.refresh(post)
+
+    except HTTPException:
+        db.rollback()
+
+        for image_path in saved_images:
+            delete_post_image(image_path)
+
+        raise
+
+    except Exception:
+        db.rollback()
+
+        for image_path in saved_images:
+            delete_post_image(image_path)
+
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Could not create post.",
+        )
+
+    return post_to_response(
+        request,
+        post,
+    )
 
 
 # ============================================================
@@ -229,34 +358,56 @@ def get_posts(
 
     query = db.query(Post)
 
-    # Search
+    # --------------------------------------------------------
+    # SEARCH
+    # --------------------------------------------------------
+
     if search and search.strip():
 
-        search_value = f"%{search.strip()}%"
+        search_value = (
+            f"%{search.strip()}%"
+        )
 
         query = query.filter(
             or_(
-                Post.title.ilike(search_value),
-                Post.content.ilike(search_value),
+                Post.title.ilike(
+                    search_value
+                ),
+                Post.content.ilike(
+                    search_value
+                ),
             )
         )
 
-    # Total count
+    # --------------------------------------------------------
+    # TOTAL
+    # --------------------------------------------------------
+
     total = query.count()
 
-    # Total pages
+    # --------------------------------------------------------
+    # TOTAL PAGES
+    # --------------------------------------------------------
+
     total_pages = (
         (total + limit - 1) // limit
         if total > 0
         else 0
     )
 
-    # Pagination
-    offset = (page - 1) * limit
+    # --------------------------------------------------------
+    # PAGINATION
+    # --------------------------------------------------------
+
+    offset = (
+        (page - 1) * limit
+    )
 
     posts = (
         query
-        .order_by(Post.created_at.desc())
+        .order_by(
+            Post.created_at.desc()
+        )
         .offset(offset)
         .limit(limit)
         .all()
@@ -264,7 +415,10 @@ def get_posts(
 
     return {
         "posts": [
-            post_to_response(request, post)
+            post_to_response(
+                request,
+                post,
+            )
             for post in posts
         ],
         "total": total,
@@ -281,19 +435,29 @@ def get_posts(
 @router.get("/mine")
 def get_my_posts(
     request: Request,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(
+        get_current_user
+    ),
     db: Session = Depends(get_db),
 ):
 
     posts = (
         db.query(Post)
-        .filter(Post.author_id == current_user.id)
-        .order_by(Post.created_at.desc())
+        .filter(
+            Post.author_id
+            == current_user.id
+        )
+        .order_by(
+            Post.created_at.desc()
+        )
         .all()
     )
 
     return [
-        post_to_response(request, post)
+        post_to_response(
+            request,
+            post,
+        )
         for post in posts
     ]
 
@@ -311,7 +475,9 @@ def get_post(
 
     post = (
         db.query(Post)
-        .filter(Post.id == post_id)
+        .filter(
+            Post.id == post_id
+        )
         .first()
     )
 
@@ -321,7 +487,10 @@ def get_post(
             detail="Post not found.",
         )
 
-    return post_to_response(request, post)
+    return post_to_response(
+        request,
+        post,
+    )
 
 
 # ============================================================
@@ -334,16 +503,24 @@ async def update_post(
     request: Request,
     title: str | None = Form(None),
     content: str | None = Form(None),
-    image: UploadFile | None = File(None),
-    current_user: User = Depends(get_current_user),
+    images: list[UploadFile] | None = File(None),
+    current_user: User = Depends(
+        get_current_user
+    ),
     db: Session = Depends(get_db),
 ):
 
     post = (
         db.query(Post)
-        .filter(Post.id == post_id)
+        .filter(
+            Post.id == post_id
+        )
         .first()
     )
+
+    # --------------------------------------------------------
+    # POST NOT FOUND
+    # --------------------------------------------------------
 
     if not post:
         raise HTTPException(
@@ -351,50 +528,155 @@ async def update_post(
             detail="Post not found.",
         )
 
-    # Only owner can update
+    # --------------------------------------------------------
+    # OWNER CHECK
+    # --------------------------------------------------------
+
     if post.author_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="You can update only your own posts.",
+            detail=(
+                "You can update only "
+                "your own posts."
+            ),
         )
 
-    # Update title
+    # --------------------------------------------------------
+    # TITLE
+    # --------------------------------------------------------
+
     if title is not None:
 
         if len(title.strip()) < 3:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Title must contain at least 3 characters.",
+                detail=(
+                    "Title must contain at least "
+                    "3 characters."
+                ),
             )
 
         post.title = title.strip()
 
-    # Update content
+    # --------------------------------------------------------
+    # CONTENT
+    # --------------------------------------------------------
+
     if content is not None:
 
         if len(content.strip()) < 10:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Content must contain at least 10 characters.",
+                detail=(
+                    "Content must contain at least "
+                    "10 characters."
+                ),
             )
 
         post.content = content.strip()
 
-    # Replace image
-    if image is not None:
+    # --------------------------------------------------------
+    # UPDATE IMAGES
+    # --------------------------------------------------------
 
-        old_image = post.image
+    images = images or []
 
-        new_image = await save_post_image(image)
+    if images:
 
-        post.image = new_image
+        subscription = (
+            check_post_limit(
+                db=db,
+                user_id=current_user.id,
+            )
+        )
 
-        delete_post_image(old_image)
+        max_images = (
+            subscription.plan
+            .max_images_per_post
+        )
 
-    db.commit()
-    db.refresh(post)
+        if (
+            max_images != -1
+            and len(images) > max_images
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=(
+                    "You've reached your plan limit. "
+                    "Kindly upgrade your plan to continue."
+                ),
+            )
 
-    return post_to_response(request, post)
+        old_images = list(
+            post.images
+        )
+
+        saved_images = []
+
+        try:
+
+            for uploaded_image in images:
+
+                image_path = (
+                    await save_post_image(
+                        uploaded_image
+                    )
+                )
+
+                new_post_image = PostImage(
+                    post_id=post.id,
+                    image_url=image_path,
+                )
+
+                db.add(new_post_image)
+
+                saved_images.append(
+                    image_path
+                )
+
+            # Delete old image records
+            for old_image in old_images:
+
+                delete_post_image(
+                    old_image.image_url
+                )
+
+                db.delete(old_image)
+
+            db.commit()
+            db.refresh(post)
+
+        except HTTPException:
+            db.rollback()
+
+            for image_path in saved_images:
+                delete_post_image(
+                    image_path
+                )
+
+            raise
+
+        except Exception:
+            db.rollback()
+
+            for image_path in saved_images:
+                delete_post_image(
+                    image_path
+                )
+
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Could not update images.",
+            )
+
+    else:
+        db.commit()
+        db.refresh(post)
+
+    return post_to_response(
+        request,
+        post,
+    )
 
 
 # ============================================================
@@ -404,15 +686,23 @@ async def update_post(
 @router.delete("/{post_id}")
 def delete_post(
     post_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(
+        get_current_user
+    ),
     db: Session = Depends(get_db),
 ):
 
     post = (
         db.query(Post)
-        .filter(Post.id == post_id)
+        .filter(
+            Post.id == post_id
+        )
         .first()
     )
+
+    # --------------------------------------------------------
+    # POST NOT FOUND
+    # --------------------------------------------------------
 
     if not post:
         raise HTTPException(
@@ -420,17 +710,41 @@ def delete_post(
             detail="Post not found.",
         )
 
-    # Only owner can delete
+    # --------------------------------------------------------
+    # OWNER CHECK
+    # --------------------------------------------------------
+
     if post.author_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="You can delete only your own posts.",
+            detail=(
+                "You can delete only "
+                "your own posts."
+            ),
         )
 
-    # Delete image from disk
-    delete_post_image(post.image)
+    # --------------------------------------------------------
+    # DELETE OLD SINGLE IMAGE
+    # --------------------------------------------------------
 
-    # Delete database record
+    delete_post_image(
+        post.image
+    )
+
+    # --------------------------------------------------------
+    # DELETE MULTIPLE IMAGES
+    # --------------------------------------------------------
+
+    for post_image in post.images:
+
+        delete_post_image(
+            post_image.image_url
+        )
+
+    # --------------------------------------------------------
+    # DELETE POST
+    # --------------------------------------------------------
+
     db.delete(post)
     db.commit()
 

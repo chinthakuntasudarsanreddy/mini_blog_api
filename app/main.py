@@ -9,8 +9,12 @@ from app.routers.auth import router as auth_router
 from app.routers.posts import router as posts_router
 from app.routers.comments import router as comments_router
 from app.routers.likes import router as likes_router
-
-
+from app.routers.subscriptions import router as subscription_router
+from app.models.subscription_plan import (
+    SubscriptionPlan,
+    Subscription,
+    Invoice,
+)
 # ============================================================
 # CREATE DATABASE TABLES
 # ============================================================
@@ -56,7 +60,7 @@ app.include_router(auth_router)
 app.include_router(posts_router)
 app.include_router(comments_router)
 app.include_router(likes_router)
-
+app.include_router(subscription_router)
 
 # ============================================================
 # ROOT ENDPOINT
