@@ -1,4 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    HTTPException,
+    status
+)
+
 from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_user
@@ -19,12 +26,16 @@ router = APIRouter(
 )
 def like_post(
     post_id: int,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     print("\n========== LIKE DEBUG ==========")
 
+    # -----------------------------------------
     # Find post
+    # -----------------------------------------
+
     post = db.query(Post).filter(
         Post.id == post_id
     ).first()
@@ -39,7 +50,10 @@ def like_post(
     print("POST TITLE:", post.title)
     print("POST OWNER ID:", post.author_id)
 
+    # -----------------------------------------
     # Check existing like
+    # -----------------------------------------
+
     existing_like = db.query(Like).filter(
         Like.post_id == post_id,
         Like.user_id == current_user.id
@@ -51,7 +65,10 @@ def like_post(
             detail="You already liked this post"
         )
 
+    # -----------------------------------------
     # Create like
+    # -----------------------------------------
+
     like = Like(
         post_id=post_id,
         user_id=current_user.id
@@ -65,7 +82,10 @@ def like_post(
     print("LIKE USER:", current_user.username)
     print("LIKE USER EMAIL:", current_user.email)
 
+    # -----------------------------------------
     # Find post owner
+    # -----------------------------------------
+
     post_owner = db.query(User).filter(
         User.id == post.author_id
     ).first()
@@ -83,7 +103,10 @@ def like_post(
     print("POST OWNER:", post_owner.username)
     print("POST OWNER EMAIL:", post_owner.email)
 
-    # Don't notify user about their own like
+    # -----------------------------------------
+    # Don't notify user about own like
+    # -----------------------------------------
+
     if post_owner.id == current_user.id:
         print("EMAIL NOT SENT: USER LIKED OWN POST")
         print("================================\n")
@@ -94,22 +117,44 @@ def like_post(
             "user_id": current_user.id
         }
 
-    # Send email
-    print("SENDING LIKE EMAIL...")
+    # -----------------------------------------
+    # Prepare notification email
+    # -----------------------------------------
 
-    email_sent = send_email(
-        recipient=post_owner.email,
-        subject="Someone liked your blog post",
-        body=(
-            f"Hello {post_owner.username},\n\n"
-            f"{current_user.username} liked your blog post.\n\n"
-            f"Post: {post.title}\n\n"
-            f"Thanks,\n"
-            f"Mini Blogging System"
-        )
+    subject = "Someone liked your blog post"
+
+    activity_time = like.created_at
+
+    body = (
+        f"Hello {post_owner.username},\n\n"
+
+        f"{current_user.username} liked your blog post.\n\n"
+
+        f"Post: {post.title}\n"
+
+        f"User: {current_user.username}\n"
+
+        f"Activity: Liked your post\n"
+
+        f"Time: "
+        f"{activity_time.strftime('%Y-%m-%d %I:%M %p')}\n\n"
+
+        f"Thanks,\n"
+        f"Mini Blogging System"
     )
 
-    print("LIKE EMAIL RESULT:", email_sent)
+    # -----------------------------------------
+    # Send email in background
+    # -----------------------------------------
+
+    background_tasks.add_task(
+        send_email,
+        recipient=post_owner.email,
+        subject=subject,
+        body=body
+    )
+
+    print("LIKE EMAIL ADDED TO BACKGROUND TASK")
     print("================================\n")
 
     return {

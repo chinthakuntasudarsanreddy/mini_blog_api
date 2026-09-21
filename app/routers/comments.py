@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_user
@@ -50,12 +50,16 @@ def get_comments(
 def add_comment(
     post_id: int,
     comment_data: CommentCreate,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     print("\n========== COMMENT DEBUG ==========")
 
+    # -----------------------------------------
     # Find post
+    # -----------------------------------------
+
     post = db.query(Post).filter(
         Post.id == post_id
     ).first()
@@ -70,7 +74,10 @@ def add_comment(
     print("POST TITLE:", post.title)
     print("POST OWNER ID:", post.author_id)
 
+    # -----------------------------------------
     # Create comment
+    # -----------------------------------------
+
     comment = Comment(
         post_id=post_id,
         user_id=current_user.id,
@@ -85,7 +92,10 @@ def add_comment(
     print("COMMENT USER:", current_user.username)
     print("COMMENT USER EMAIL:", current_user.email)
 
+    # -----------------------------------------
     # Find post owner
+    # -----------------------------------------
+
     post_owner = db.query(User).filter(
         User.id == post.author_id
     ).first()
@@ -93,35 +103,65 @@ def add_comment(
     if not post_owner:
         print("EMAIL NOT SENT: POST OWNER NOT FOUND")
         print("=================================\n")
+
         return comment
 
     print("POST OWNER:", post_owner.username)
     print("POST OWNER EMAIL:", post_owner.email)
 
-    # Don't notify user about their own comment
+    # -----------------------------------------
+    # Don't notify user about own comment
+    # -----------------------------------------
+
     if post_owner.id == current_user.id:
-        print("EMAIL NOT SENT: USER COMMENTED ON OWN POST")
+        print(
+            "EMAIL NOT SENT: "
+            "USER COMMENTED ON OWN POST"
+        )
+
         print("=================================\n")
+
         return comment
 
-    # Send email
-    print("SENDING COMMENT EMAIL...")
+    # -----------------------------------------
+    # Prepare email
+    # -----------------------------------------
 
-    email_sent = send_email(
-        recipient=post_owner.email,
-        subject="New comment on your blog post",
-        body=(
-            f"Hello {post_owner.username},\n\n"
-            f"{current_user.username} commented on your blog post.\n\n"
-            f"Post: {post.title}\n\n"
-            f"Comment:\n"
-            f"{comment.text}\n\n"
-            f"Thanks,\n"
-            f"Mini Blogging System"
-        )
+    subject = "New comment on your blog post"
+
+    body = (
+        f"Hello {post_owner.username},\n\n"
+
+        f"{current_user.username} commented "
+        f"on your blog post.\n\n"
+
+        f"Post: {post.title}\n"
+
+        f"User: {current_user.username}\n"
+
+        f"Activity: Commented on your post\n"
+
+        f"Time: {comment.created_at.strftime('%Y-%m-%d %I:%M %p')}\n\n"
+
+        f"Comment:\n"
+        f"{comment.text}\n\n"
+
+        f"Thanks,\n"
+        f"Mini Blogging System"
     )
 
-    print("COMMENT EMAIL RESULT:", email_sent)
+    # -----------------------------------------
+    # Send email in background
+    # -----------------------------------------
+
+    background_tasks.add_task(
+        send_email,
+        recipient=post_owner.email,
+        subject=subject,
+        body=body
+    )
+
+    print("COMMENT EMAIL ADDED TO BACKGROUND TASK")
     print("=================================\n")
 
     return comment

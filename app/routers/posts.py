@@ -1,6 +1,7 @@
 
 import uuid
 from pathlib import Path
+from typing import Annotated
 
 from fastapi import (
     APIRouter,
@@ -169,7 +170,7 @@ def post_to_response(
             post.image,
         ),
 
-        # New multiple-image support
+        # Multiple-image support
         "images": [
             make_image_url(
                 request,
@@ -195,7 +196,15 @@ async def create_post(
     request: Request,
     title: str = Form(...),
     content: str = Form(...),
-    images: list[UploadFile] | None = File(None),
+
+    # IMPORTANT:
+    # This makes Swagger/OpenAPI treat images
+    # as actual uploaded files.
+    images: Annotated[
+        list[UploadFile] | None,
+        File()
+    ] = None,
+
     current_user: User = Depends(
         get_current_user
     ),
@@ -503,7 +512,14 @@ async def update_post(
     request: Request,
     title: str | None = Form(None),
     content: str | None = Form(None),
-    images: list[UploadFile] | None = File(None),
+
+    # IMPORTANT:
+    # Same file-upload definition for update.
+    images: Annotated[
+        list[UploadFile] | None,
+        File()
+    ] = None,
+
     current_user: User = Depends(
         get_current_user
     ),
@@ -583,11 +599,9 @@ async def update_post(
 
     if images:
 
-        subscription = (
-            check_post_limit(
-                db=db,
-                user_id=current_user.id,
-            )
+        subscription = check_post_limit(
+            db=db,
+            user_id=current_user.id,
         )
 
         max_images = (
@@ -615,6 +629,10 @@ async def update_post(
 
         try:
 
+            # ------------------------------------------------
+            # SAVE NEW IMAGES
+            # ------------------------------------------------
+
             for uploaded_image in images:
 
                 image_path = (
@@ -634,7 +652,10 @@ async def update_post(
                     image_path
                 )
 
-            # Delete old image records
+            # ------------------------------------------------
+            # DELETE OLD IMAGE RECORDS
+            # ------------------------------------------------
+
             for old_image in old_images:
 
                 delete_post_image(
