@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>Blog Analytics Dashboard</title>
+
+<!-- Favicon -->
+<link rel="icon" type="image/svg+xml" href="./favicon.svg">
+
+<!-- Dashboard CSS -->
+<link rel="stylesheet" href="style.css">
+
+
+</head>
+
+<body>
+
+<div class="dashboard">
+
+    <!-- Header -->
+    <header class="dashboard-header">
+        <div>
+            <h1>Blog Analytics Dashboard</h1>
+            <p>Overview of your Mini Blog API</p>
+        </div>
+
+        <button id="refreshBtn">
+            Refresh
+        </button>
+    </header>
+
+
+    <!-- Statistics Cards -->
+    <section class="stats-grid">
+
+        <div class="stat-card">
+            <h3>User ID</h3>
+            <p id="totalUsers">0</p>
+        </div>
+
+        <div class="stat-card">
+            <h3>Total Posts</h3>
+            <p id="totalPosts">0</p>
+        </div>
+
+        <div class="stat-card">
+            <h3>Total Comments</h3>
+            <p id="totalComments">0</p>
+        </div>
+
+        <div class="stat-card">
+            <h3>Total Likes</h3>
+            <p id="totalLikes">0</p>
+        </div>
+
+    </section>
+
+
+    <!-- Charts -->
+    <section class="charts-grid">
+
+        <div class="chart-card">
+            <h2>Likes by Post</h2>
+            <canvas id="postsChart"></canvas>
+        </div>
+
+
+        <div class="chart-card">
+            <h2>Engagement</h2>
+            <canvas id="engagementChart"></canvas>
+        </div>
+
+
+        <div class="chart-card">
+            <h2>Views by Post</h2>
+            <canvas id="userPostsChart"></canvas>
+        </div>
+
+
+        <div class="chart-card">
+            <h2>Subscription Plans</h2>
+            <canvas id="subscriptionChart"></canvas>
+        </div>
+
+    </section>
+
+
+    <!-- Dashboard Status -->
+    <div id="dashboardStatus" class="status">
+        Loading dashboard...
+    </div>
+
+</div>
+
+
+<!-- Local Chart.js -->
+<script src="./node_modules/chart.js/dist/chart.umd.js"></script>
+
+<!-- Dashboard JavaScript -->
+<script src="./dashboard.js"></script>
+
+
+</body>
+
+</html>

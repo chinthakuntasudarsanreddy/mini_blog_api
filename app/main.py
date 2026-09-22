@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.openapi.utils import get_openapi
 
@@ -10,6 +11,7 @@ from app.routers.posts import router as posts_router
 from app.routers.comments import router as comments_router
 from app.routers.likes import router as likes_router
 from app.routers.subscriptions import router as subscription_router
+from app.routers.dashboard import router as dashboard_router
 
 from app.models.subscription_plan import (
     SubscriptionPlan,
@@ -33,6 +35,22 @@ app = FastAPI(
     title="Mini Blogging System",
     description="Blogging API with JWT authentication",
     version="1.0.0",
+)
+
+
+# ============================================================
+# CORS CONFIGURATION
+# ============================================================
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://127.0.0.1:8081",
+        "http://localhost:8081",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
@@ -64,6 +82,7 @@ app.include_router(posts_router)
 app.include_router(comments_router)
 app.include_router(likes_router)
 app.include_router(subscription_router)
+app.include_router(dashboard_router)
 
 
 # ============================================================
@@ -90,17 +109,6 @@ def health():
 
 # ============================================================
 # CUSTOM OPENAPI
-# ============================================================
-#
-# FastAPI 0.141+ generates OpenAPI 3.1.
-# Swagger UI can display UploadFile[] incorrectly as:
-#
-#     array<string>
-#
-# instead of file upload controls.
-#
-# We modify ONLY the OpenAPI documentation.
-# The actual FastAPI endpoint still receives UploadFile objects.
 # ============================================================
 
 def custom_openapi():

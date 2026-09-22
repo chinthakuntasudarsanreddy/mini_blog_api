@@ -34,3 +34,5 @@ Thumbs.db
 
 # Logs
 *.log
+dashboard/node_modules/
+dashboard/dist/
