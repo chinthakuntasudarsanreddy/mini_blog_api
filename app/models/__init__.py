@@ -10,3 +10,4 @@ from app.models.subscription_plan import (
     Subscription,
     Invoice,
 )
+from app.models.notification import Notification

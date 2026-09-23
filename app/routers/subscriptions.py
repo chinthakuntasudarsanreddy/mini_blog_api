@@ -1,4 +1,3 @@
-
 from datetime import datetime, timedelta
 from uuid import uuid4
 
@@ -13,6 +12,7 @@ from app.models.subscription_plan import (
     Invoice,
 )
 from app.services.invoice import generate_invoice_pdf
+from app.services.notifications import create_notification
 
 
 router = APIRouter(
@@ -165,6 +165,27 @@ def subscribe_to_plan(
     db.refresh(subscription)
 
     # -----------------------------------------------------
+    # CREATE SUBSCRIPTION NOTIFICATION
+    # -----------------------------------------------------
+
+    notification = create_notification(
+        db=db,
+        user_id=user.id,
+        message=(
+            f"Your {plan.name} subscription has been "
+            f"activated successfully."
+        ),
+        notification_type="subscription",
+    )
+
+    print("\n========== SUBSCRIPTION NOTIFICATION ==========")
+    print("NOTIFICATION ID:", notification.id)
+    print("NOTIFICATION TYPE:", notification.notification_type)
+    print("USER ID:", user.id)
+    print("PLAN:", plan.name)
+    print("===============================================\n")
+
+    # -----------------------------------------------------
     # CREATE INVOICE NUMBER
     # -----------------------------------------------------
 
@@ -235,4 +256,10 @@ def subscribe_to_plan(
         },
 
         "limits": limits,
+
+        "notification": {
+            "id": notification.id,
+            "type": notification.notification_type,
+            "message": notification.message,
+        },
     }

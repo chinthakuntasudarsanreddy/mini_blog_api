@@ -13,6 +13,7 @@ from app.core.database import get_db
 from app.models.like import Like
 from app.models.post import Post
 from app.models.user import User
+from app.services.notifications import create_notification
 from app.utils.email import send_email
 
 
@@ -91,7 +92,7 @@ def like_post(
     ).first()
 
     if not post_owner:
-        print("EMAIL NOT SENT: POST OWNER NOT FOUND")
+        print("POST OWNER NOT FOUND")
         print("================================\n")
 
         return {
@@ -108,7 +109,9 @@ def like_post(
     # -----------------------------------------
 
     if post_owner.id == current_user.id:
-        print("EMAIL NOT SENT: USER LIKED OWN POST")
+        print("USER LIKED OWN POST")
+        print("NO NOTIFICATION CREATED")
+        print("NO EMAIL SENT")
         print("================================\n")
 
         return {
@@ -116,6 +119,21 @@ def like_post(
             "post_id": post_id,
             "user_id": current_user.id
         }
+
+    # -----------------------------------------
+    # Create in-app notification
+    # -----------------------------------------
+
+    notification = create_notification(
+        db=db,
+        user_id=post_owner.id,
+        message=f"{current_user.username} liked your post: {post.title}",
+        notification_type="like"
+    )
+
+    print("IN-APP NOTIFICATION CREATED")
+    print("NOTIFICATION ID:", notification.id)
+    print("NOTIFICATION TYPE:", notification.notification_type)
 
     # -----------------------------------------
     # Prepare notification email
@@ -160,7 +178,8 @@ def like_post(
     return {
         "message": "Post liked successfully",
         "post_id": post_id,
-        "user_id": current_user.id
+        "user_id": current_user.id,
+        "notification_id": notification.id
     }
 
 
@@ -172,6 +191,10 @@ def unlike_post(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    # -----------------------------------------
+    # Find post
+    # -----------------------------------------
+
     post = db.query(Post).filter(
         Post.id == post_id
     ).first()
@@ -181,6 +204,10 @@ def unlike_post(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Post not found"
         )
+
+    # -----------------------------------------
+    # Find existing like
+    # -----------------------------------------
 
     like = db.query(Like).filter(
         Like.post_id == post_id,
@@ -192,6 +219,10 @@ def unlike_post(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="You have not liked this post"
         )
+
+    # -----------------------------------------
+    # Delete like
+    # -----------------------------------------
 
     db.delete(like)
     db.commit()
@@ -210,6 +241,10 @@ def get_post_likes(
     post_id: int,
     db: Session = Depends(get_db)
 ):
+    # -----------------------------------------
+    # Find post
+    # -----------------------------------------
+
     post = db.query(Post).filter(
         Post.id == post_id
     ).first()
@@ -219,6 +254,10 @@ def get_post_likes(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Post not found"
         )
+
+    # -----------------------------------------
+    # Count likes
+    # -----------------------------------------
 
     like_count = db.query(Like).filter(
         Like.post_id == post_id

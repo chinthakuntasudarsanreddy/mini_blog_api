@@ -1,4 +1,3 @@
-
 from sqlalchemy import Column, Integer, String
 from sqlalchemy.orm import relationship
 
@@ -59,6 +58,12 @@ class User(Base):
 
     invoices = relationship(
         "Invoice",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+
+    notifications = relationship(
+        "Notification",
         back_populates="user",
         cascade="all, delete-orphan",
     )

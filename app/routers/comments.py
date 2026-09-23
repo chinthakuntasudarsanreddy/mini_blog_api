@@ -7,6 +7,7 @@ from app.models.comment import Comment
 from app.models.post import Post
 from app.models.user import User
 from app.schemas.comment import CommentCreate, CommentResponse
+from app.services.notifications import create_notification
 from app.utils.email import send_email
 
 
@@ -101,7 +102,7 @@ def add_comment(
     ).first()
 
     if not post_owner:
-        print("EMAIL NOT SENT: POST OWNER NOT FOUND")
+        print("POST OWNER NOT FOUND")
         print("=================================\n")
 
         return comment
@@ -115,13 +116,32 @@ def add_comment(
 
     if post_owner.id == current_user.id:
         print(
-            "EMAIL NOT SENT: "
             "USER COMMENTED ON OWN POST"
         )
 
+        print("NO NOTIFICATION CREATED")
+        print("NO EMAIL SENT")
         print("=================================\n")
 
         return comment
+
+    # -----------------------------------------
+    # Create in-app notification
+    # -----------------------------------------
+
+    notification = create_notification(
+        db=db,
+        user_id=post_owner.id,
+        message=(
+            f"{current_user.username} commented "
+            f"on your post: {post.title}"
+        ),
+        notification_type="comment"
+    )
+
+    print("IN-APP NOTIFICATION CREATED")
+    print("NOTIFICATION ID:", notification.id)
+    print("NOTIFICATION TYPE:", notification.notification_type)
 
     # -----------------------------------------
     # Prepare email
@@ -141,7 +161,8 @@ def add_comment(
 
         f"Activity: Commented on your post\n"
 
-        f"Time: {comment.created_at.strftime('%Y-%m-%d %I:%M %p')}\n\n"
+        f"Time: "
+        f"{comment.created_at.strftime('%Y-%m-%d %I:%M %p')}\n\n"
 
         f"Comment:\n"
         f"{comment.text}\n\n"
@@ -175,6 +196,10 @@ def delete_comment(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    # -----------------------------------------
+    # Find comment
+    # -----------------------------------------
+
     comment = db.query(Comment).filter(
         Comment.id == comment_id
     ).first()
@@ -185,11 +210,19 @@ def delete_comment(
             detail="Comment not found"
         )
 
+    # -----------------------------------------
+    # Check comment ownership
+    # -----------------------------------------
+
     if comment.user_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You can delete only your own comments"
         )
+
+    # -----------------------------------------
+    # Delete comment
+    # -----------------------------------------
 
     db.delete(comment)
     db.commit()

@@ -1,106 +1,303 @@
-<!DOCTYPE html>
 
+<!DOCTYPE html>
 <html lang="en">
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-<title>Blog Analytics Dashboard</title>
+    <title>Blog Analytics Dashboard</title>
 
-<!-- Favicon -->
-<link rel="icon" type="image/svg+xml" href="./favicon.svg">
+    <link
+        rel="icon"
+        type="image/svg+xml"
+        href="./favicon.svg"
+    >
 
-<!-- Dashboard CSS -->
-<link rel="stylesheet" href="style.css">
-
-
+    <link
+        rel="stylesheet"
+        href="style.css"
+    >
 </head>
 
 <body>
 
 <div class="dashboard">
 
-    <!-- Header -->
+    <!-- =====================================================
+         HEADER
+         ===================================================== -->
+
     <header class="dashboard-header">
+
         <div>
             <h1>Blog Analytics Dashboard</h1>
-            <p>Overview of your Mini Blog API</p>
+
+            <p>
+                Overview of your Mini Blog API
+            </p>
         </div>
 
-        <button id="refreshBtn">
-            Refresh
-        </button>
+
+        <!-- HEADER ACTIONS -->
+
+        <div class="header-actions">
+
+            <!-- NOTIFICATIONS -->
+
+            <div class="notification-wrapper">
+
+                <button
+                    id="notificationBtn"
+                    class="notification-btn"
+                    type="button"
+                    title="Notifications"
+                >
+                    🔔
+
+                    <span
+                        id="notificationBadge"
+                        class="notification-badge hidden"
+                    >
+                        0
+                    </span>
+
+                </button>
+
+
+                <!-- NOTIFICATION PANEL -->
+
+                <div
+                    id="notificationPanel"
+                    class="notification-panel hidden"
+                >
+
+                    <div class="notification-header">
+
+                        <h2>
+                            Notifications
+                        </h2>
+
+                        <button
+                            id="markAllReadBtn"
+                            type="button"
+                            class="mark-all-btn"
+                        >
+                            Mark all read
+                        </button>
+
+                    </div>
+
+
+                    <div
+                        id="notificationList"
+                        class="notification-list"
+                    >
+
+                        <div class="notification-loading">
+                            Loading notifications...
+                        </div>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+
+            <!-- REFRESH -->
+
+            <button
+                id="refreshBtn"
+                type="button"
+            >
+                Refresh
+            </button>
+
+        </div>
+
     </header>
 
 
-    <!-- Statistics Cards -->
+    <!-- =====================================================
+         STATISTICS CARDS
+         ===================================================== -->
+
     <section class="stats-grid">
 
-        <div class="stat-card">
-            <h3>User ID</h3>
-            <p id="totalUsers">0</p>
-        </div>
+
+        <!-- USER ID -->
 
         <div class="stat-card">
-            <h3>Total Posts</h3>
-            <p id="totalPosts">0</p>
+
+            <h3>
+                User ID
+            </h3>
+
+            <p id="userId">
+                0
+            </p>
+
         </div>
 
-        <div class="stat-card">
-            <h3>Total Comments</h3>
-            <p id="totalComments">0</p>
-        </div>
+
+        <!-- TOTAL POSTS -->
 
         <div class="stat-card">
-            <h3>Total Likes</h3>
-            <p id="totalLikes">0</p>
+
+            <h3>
+                Total Posts
+            </h3>
+
+            <p id="totalPosts">
+                0
+            </p>
+
+        </div>
+
+
+        <!-- TOTAL COMMENTS -->
+
+        <div class="stat-card">
+
+            <h3>
+                Total Comments
+            </h3>
+
+            <p id="totalComments">
+                0
+            </p>
+
+        </div>
+
+
+        <!-- TOTAL LIKES -->
+
+        <div class="stat-card">
+
+            <h3>
+                Total Likes
+            </h3>
+
+            <p id="totalLikes">
+                0
+            </p>
+
         </div>
 
     </section>
 
 
-    <!-- Charts -->
+    <!-- =====================================================
+         CHARTS
+         ===================================================== -->
+
     <section class="charts-grid">
 
+
+        <!-- LIKES -->
+
         <div class="chart-card">
-            <h2>Likes by Post</h2>
-            <canvas id="postsChart"></canvas>
+
+            <h2>
+                Likes by Post
+            </h2>
+
+            <div class="chart-container">
+
+                <canvas
+                    id="postsChart"
+                ></canvas>
+
+            </div>
+
         </div>
 
 
+        <!-- COMMENTS -->
+
         <div class="chart-card">
-            <h2>Engagement</h2>
-            <canvas id="engagementChart"></canvas>
+
+            <h2>
+                Comments by Post
+            </h2>
+
+            <div class="chart-container">
+
+                <canvas
+                    id="engagementChart"
+                ></canvas>
+
+            </div>
+
         </div>
 
 
+        <!-- VIEWS -->
+
         <div class="chart-card">
-            <h2>Views by Post</h2>
-            <canvas id="userPostsChart"></canvas>
+
+            <h2>
+                Views by Post
+            </h2>
+
+            <div class="chart-container">
+
+                <canvas
+                    id="userPostsChart"
+                ></canvas>
+
+            </div>
+
         </div>
 
 
+        <!-- SUBSCRIPTION -->
+
         <div class="chart-card">
-            <h2>Subscription Plans</h2>
-            <canvas id="subscriptionChart"></canvas>
+
+            <h2>
+                Subscription Plans
+            </h2>
+
+            <div class="chart-container">
+
+                <canvas
+                    id="subscriptionChart"
+                ></canvas>
+
+            </div>
+
         </div>
 
     </section>
 
 
-    <!-- Dashboard Status -->
-    <div id="dashboardStatus" class="status">
+    <!-- =====================================================
+         DASHBOARD STATUS
+         ===================================================== -->
+
+    <div
+        id="dashboardStatus"
+        class="status"
+    >
         Loading dashboard...
     </div>
 
 </div>
 
 
-<!-- Local Chart.js -->
+<!-- =========================================================
+     CHART.JS
+     ========================================================= -->
+
 <script src="./node_modules/chart.js/dist/chart.umd.js"></script>
 
-<!-- Dashboard JavaScript -->
+
+<!-- =========================================================
+     DASHBOARD JAVASCRIPT
+     ========================================================= -->
+
 <script src="./dashboard.js"></script>
 
 
