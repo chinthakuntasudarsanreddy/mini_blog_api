@@ -20,6 +20,7 @@ from app.models.subscription_plan import (
 )
 
 from app.models.notification import Notification
+from app.models import AISupportChat
 
 from app.routers.auth import router as auth_router
 from app.routers.posts import router as posts_router
@@ -28,7 +29,7 @@ from app.routers.likes import router as likes_router
 from app.routers.subscriptions import router as subscription_router
 from app.routers.dashboard import router as dashboard_router
 from app.routers.notifications import router as notifications_router
-
+from app.routers.ai_support import router as ai_support_router
 
 # ============================================================
 # DATABASE
@@ -56,6 +57,9 @@ app.add_middleware(
     CORSMiddleware,
 
     allow_origins=[
+          "http://127.0.0.1:5173",
+        "http://localhost:5173",
+        
         "http://127.0.0.1:8081",
         "http://localhost:8081",
     ],
@@ -97,7 +101,7 @@ app.include_router(dashboard_router)
 
 app.include_router(notifications_router)
 
-
+app.include_router(ai_support_router)
 # ============================================================
 # SWAGGER AUTHORIZATION
 # ============================================================

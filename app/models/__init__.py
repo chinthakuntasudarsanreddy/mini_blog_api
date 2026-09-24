@@ -11,3 +11,4 @@ from app.models.subscription_plan import (
     Invoice,
 )
 from app.models.notification import Notification
+from app.models.ai_support import AISupportChat
