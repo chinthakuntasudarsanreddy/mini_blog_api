@@ -29,7 +29,20 @@ class User(Base):
 
     password = Column(
         String(255),
+        nullable=True,
+    )
+
+    provider = Column(
+        String(50),
         nullable=False,
+        default="local",
+    )
+
+    provider_id = Column(
+        String(255),
+        nullable=True,
+        unique=True,
+        index=True,
     )
 
     posts = relationship(

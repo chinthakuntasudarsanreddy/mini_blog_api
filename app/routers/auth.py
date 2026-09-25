@@ -17,51 +17,55 @@ from app.schemas.user import (
 
 router = APIRouter(
     prefix="/auth",
-    tags=["Authentication"]
+    tags=["Authentication"],
 )
 
 
 @router.post(
     "/register",
     response_model=UserResponse,
-    status_code=status.HTTP_201_CREATED
+    status_code=status.HTTP_201_CREATED,
 )
 def register(
     user_data: UserRegister,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     # Check username
-    existing_username = db.query(User).filter(
-        User.username == user_data.username
-    ).first()
+    existing_username = (
+        db.query(User)
+        .filter(User.username == user_data.username)
+        .first()
+    )
 
     if existing_username:
         raise HTTPException(
-            status_code=400,
-            detail="Username already exists"
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Username already exists",
         )
 
     # Check email
-    existing_email = db.query(User).filter(
-        User.email == user_data.email
-    ).first()
+    existing_email = (
+        db.query(User)
+        .filter(User.email == user_data.email)
+        .first()
+    )
 
     if existing_email:
         raise HTTPException(
-            status_code=400,
-            detail="Email already registered"
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email already registered",
         )
 
     # Hash password
-    hashed_password = hash_password(
-        user_data.password
-    )
+    hashed_password = hash_password(user_data.password)
 
-    # Create user
+    # Create local user
     user = User(
         username=user_data.username,
         email=user_data.email,
-        password=hashed_password
+        password=hashed_password,
+        provider="local",
+        provider_id=None,
     )
 
     db.add(user)
@@ -73,38 +77,50 @@ def register(
 
 @router.post(
     "/login",
-    response_model=TokenResponse
+    response_model=TokenResponse,
 )
 def login(
     login_data: UserLogin,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
-    user = db.query(User).filter(
-        User.email == login_data.email
-    ).first()
+    user = (
+        db.query(User)
+        .filter(User.email == login_data.email)
+        .first()
+    )
 
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid email or password"
+            detail="Invalid email or password",
+        )
+
+    # Social/Auth0 users don't have a local password
+    if not user.password:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=(
+                "This account uses social login. "
+                "Please continue with Google or Facebook."
+            ),
         )
 
     if not verify_password(
         login_data.password,
-        user.password
+        user.password,
     ):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid email or password"
+            detail="Invalid email or password",
         )
 
     access_token = create_access_token(
         {
-            "sub": str(user.id)
+            "sub": str(user.id),
         }
     )
 
     return {
         "access_token": access_token,
-        "token_type": "bearer"
+        "token_type": "bearer",
     }

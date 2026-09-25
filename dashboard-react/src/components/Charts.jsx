@@ -30,35 +30,56 @@ ChartJS.register(
 
 function Charts({ posts }) {
 
-    const labels =
-        posts.map(
-            post =>
-                post.title ||
-                `Post ${post.post_id}`
-        );
+    const labels = posts.map(
+        post =>
+            post.title ||
+            `Post ${post.post_id}`
+    );
 
 
-    const likes =
-        posts.map(
-            post =>
-                post.likes ?? 0
-        );
+    // Likes
+    const likes = posts.map(
+        post =>
+            post.likes ?? 0
+    );
 
 
-    const comments =
-        posts.map(
-            post =>
-                post.comments ?? 0
-        );
+    // Comments
+    const comments = posts.map(
+        post =>
+            post.comments ?? 0
+    );
 
 
-    const views =
-        posts.map(
-            post =>
-                post.views ?? 0
-        );
+    // Views
+    const views = posts.map(
+        post =>
+            post.views ?? 0
+    );
 
 
+    // Subscription plans
+    const subscriptions = posts.map(
+        post =>
+            post.subscription_plan ||
+            "Basic"
+    );
+
+
+    const subscriptionCounts = subscriptions.reduce(
+        (acc, plan) => {
+
+            acc[plan] =
+                (acc[plan] || 0) + 1;
+
+            return acc;
+
+        },
+        {}
+    );
+
+
+    // Likes chart
     const likesData = {
 
         labels,
@@ -76,6 +97,7 @@ function Charts({ posts }) {
     };
 
 
+    // Comments chart
     const commentsData = {
 
         labels,
@@ -93,6 +115,7 @@ function Charts({ posts }) {
     };
 
 
+    // Views chart
     const viewsData = {
 
         labels,
@@ -112,10 +135,32 @@ function Charts({ posts }) {
     };
 
 
+    // Subscription chart
+    const subscriptionsData = {
+
+        labels: Object.keys(subscriptionCounts),
+
+        datasets: [
+            {
+                label: "Subscriptions",
+
+                data: Object.values(subscriptionCounts),
+
+                borderWidth: 2,
+
+                tension: 0.3
+            }
+        ]
+
+    };
+
+
     return (
 
         <section className="charts-grid">
 
+
+            {/* Likes */}
 
             <div className="chart-card">
 
@@ -138,6 +183,8 @@ function Charts({ posts }) {
             </div>
 
 
+            {/* Comments */}
+
             <div className="chart-card">
 
                 <h2>
@@ -159,6 +206,8 @@ function Charts({ posts }) {
             </div>
 
 
+            {/* Views */}
+
             <div className="chart-card">
 
                 <h2>
@@ -169,6 +218,29 @@ function Charts({ posts }) {
 
                     <Line
                         data={viewsData}
+                        options={{
+                            responsive: true,
+                            maintainAspectRatio: false
+                        }}
+                    />
+
+                </div>
+
+            </div>
+
+
+            {/* Subscriptions */}
+
+            <div className="chart-card">
+
+                <h2>
+                    Subscription Plans
+                </h2>
+
+                <div className="chart-container">
+
+                    <Line
+                        data={subscriptionsData}
                         options={{
                             responsive: true,
                             maintainAspectRatio: false

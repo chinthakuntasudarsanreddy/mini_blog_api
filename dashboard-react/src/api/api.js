@@ -1,62 +1,78 @@
+
 const API_URL =
-    "http://127.0.0.1:8000";
+    import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
 
 
 function getAccessToken() {
-
-    return localStorage.getItem(
-        "access_token"
-    );
-
+    return localStorage.getItem("access_token");
 }
 
 
-async function request(
-    endpoint,
-    options = {}
-) {
+async function request(endpoint, options = {}) {
 
-    const token =
-        getAccessToken();
+    const token = getAccessToken();
 
-
-    const response =
-        await fetch(
-            `${API_URL}${endpoint}`,
-            {
-                ...options,
-
-                headers: {
-                    "Content-Type":
-                        "application/json",
-
-                    "Authorization":
-                        `Bearer ${token}`,
-
-                    ...(options.headers || {})
-                }
-            }
+    if (!token) {
+        throw new Error(
+            "Authentication token is missing."
         );
+    }
+
+
+    const response = await fetch(
+        `${API_URL}${endpoint}`,
+        {
+            ...options,
+
+            headers: {
+                "Content-Type": "application/json",
+
+                "Authorization":
+                    `Bearer ${token}`,
+
+                ...(options.headers || {})
+            }
+        }
+    );
+
+
+    const responseText =
+        await response.text();
 
 
     if (!response.ok) {
 
-        const text =
-            await response.text();
+        console.error(
+            `API Error ${response.status}:`,
+            responseText
+        );
 
         throw new Error(
-            text ||
-            `HTTP ${response.status}`
+            responseText ||
+            `Backend returned HTTP ${response.status}`
         );
 
     }
 
 
-    return response.json();
+    try {
+
+        return JSON.parse(
+            responseText
+        );
+
+    } catch {
+
+        return responseText;
+
+    }
 
 }
 
 
+/*
+ * Dashboard
+ */
 export async function getDashboardData() {
 
     return request(
@@ -66,6 +82,9 @@ export async function getDashboardData() {
 }
 
 
+/*
+ * Notifications
+ */
 export async function getNotifications() {
 
     return request(
@@ -75,6 +94,9 @@ export async function getNotifications() {
 }
 
 
+/*
+ * Mark all notifications as read
+ */
 export async function markAllNotificationsRead() {
 
     return request(
